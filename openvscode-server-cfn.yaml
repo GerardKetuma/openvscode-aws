@@ -1,0 +1,334 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation template to setup OpenVSCode Server on an Ubuntu(20) instance
+  using the latest AMI, Intel/AMD EBS instances, and AWS Systems Manager Session
+  Manager instead of SSH Key pairs for interacting with the provisioned server.
+  The EC2 instance is deployed on the default VPC of the account.
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - t3a.nano
+      - t3a.micro
+      - t3a.small
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t3a.2xlarge
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - m6i.large
+      - m6i.xlarge
+      - m6i.2xlarge
+      - m6i.4xlarge
+      - m6i.8xlarge
+      - m6i.12xlarge
+      - m6i.16xlarge
+      - m6i.24xlarge
+      - m6i.32xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - m5.12xlarge
+      - m5.16xlarge
+      - m5.24xlarge
+      - m5.metal
+      - m5a.large
+      - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.8xlarge
+      - m5a.12xlarge
+      - m5a.16xlarge
+      - m5a.24xlarge
+      - m5n.large
+      - m5n.xlarge
+      - m5n.2xlarge
+      - m5n.4xlarge
+      - m5n.8xlarge
+      - m5n.12xlarge
+      - m5n.16xlarge
+      - m5n.24xlarge
+      - m5n.metal
+      - m5zn.large
+      - m5zn.xlarge
+      - m5zn.2xlarge
+      - m5zn.3xlarge
+      - m5zn.6xlarge
+      - m5zn.12xlarge
+      - m5zn.metal
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m4.16xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.12xlarge
+      - c5.18xlarge
+      - c5.24xlarge
+      - c5.metal
+      - c5a.large
+      - c5a.xlarge
+      - c5a.2xlarge
+      - c5a.4xlarge
+      - c5a.8xlarge
+      - c5a.12xlarge
+      - c5a.16xlarge
+      - c5a.24xlarge
+      - c5n.large
+      - c5n.xlarge
+      - c5n.2xlarge
+      - c5n.4xlarge
+      - c5n.9xlarge
+      - c5n.18xlarge
+      - c5n.metal
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.8xlarge
+      - r5.12xlarge
+      - r5.16xlarge
+      - r5.24xlarge
+      - r5.metal
+      - r5a.large
+      - r5a.xlarge
+      - r5a.2xlarge
+      - r5a.4xlarge
+      - r5a.8xlarge
+      - r5a.12xlarge
+      - r5a.16xlarge
+      - r5a.24xlarge
+      - r5b.large
+      - r5b.xlarge
+      - r5b.2xlarge
+      - r5b.4xlarge
+      - r5b.8xlarge
+      - r5b.12xlarge
+      - r5b.16xlarge
+      - r5b.24xlarge
+      - r5b.metal
+      - r5n.large
+      - r5n.xlarge
+      - r5n.2xlarge
+      - r5n.4xlarge
+      - r5n.8xlarge
+      - r5n.12xlarge
+      - r5n.16xlarge
+      - r5n.24xlarge
+      - r5n.metal
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+    ConstraintDescription: must be a valid EC2 instance type with EBS storage and Intel/AMD processors.
+  LatestAmiId:
+    Description: AMI for Instance (default is latest Ubuntu(20) from Canonical)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: '/aws/service/canonical/ubuntu/server/focal/stable/current/amd64/hvm/ebs-gp2/ami-id'
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT7M
+        Count: '1'
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          full_install:
+          - install_enable_cfn_hup_and_startup_script
+        install_enable_cfn_hup_and_startup_script:
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              content:
+                !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content:
+                !Sub |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --configsets full_install --region ${AWS::Region}
+                  runas=root
+            "/lib/systemd/system/cfn-hup.service":
+              content:
+                |
+                  [Unit]
+                  Description=cfn-hup daemon
+
+                  [Service]
+                  Type=simple
+                  ExecStart=/opt/aws/bin/cfn-hup
+                  Restart=always
+
+                  [Install]
+                  WantedBy=multi-user.target
+            "/opt/bin/update-start-vscode-server.sh":
+              content:
+                |
+                  #!/bin/bash -xe
+
+                  # Check if /opt/bin directory exists. If not create it.
+                  DIR=/opt/bin
+                  if [ -d "$DIR" ]; then
+                    :
+                  else
+                    mkdir "$DIR"
+                  fi
+
+                  # Function that downloads the Open VSCode Server
+                  download_vscode_server() {
+                    # Change directory to where we want to store script
+                    cd /opt/bin
+
+                    # Get the lastest version and untar/unzip
+                    VSCODEDIR=vscode-server # This directory stores the OpenVSCode-Server
+                    if [ -d "$VSCODEDIR" ]; then
+                      :
+                    else
+                      mkdir "$VSCODEDIR"
+                    fi
+
+                    wget "https://github.com/gitpod-io/openvscode-server/releases/download/openvscode-server-v$1/openvscode-server-v$1-linux-x64.tar.gz" -O code-server.tar.gz
+                    tar -xzf code-server.tar.gz -C ./vscode-server --strip-components=1
+                    rm code-server.tar.gz
+                  }
+
+                  # Get latest version number, export it and save it to vscode-vars.txt
+                  LATEST="$(curl -sL https://api.github.com/repos/gitpod-io/openvscode-server/releases/latest | grep '"tag_name":' | cut -d'"' -f4 | sed -e 's/openvscode-server-v\(.*\)/\1/')"
+
+                  FILE=/opt/bin/latest.txt # This file holds the latest version number.
+                  if [ -f "$FILE" ]; then
+                    PREVIOUS=$(cat "$FILE")
+                    if [ "$PREVIOUS" != "$LATEST" ]; then
+                      download_vscode_server "$LATEST"
+                      echo "$LATEST" > "$FILE"
+                    else
+                      :
+                    fi
+                  else
+                    download_vscode_server "$LATEST"
+                    # Create file and insert lastest
+                    touch "$FILE"
+                    echo "$LATEST" > "$FILE"
+                  fi
+
+                  # Run the server
+                  cd /opt/bin/vscode-server
+                  ./server.sh
+              mode: '000755'
+              owner: root
+              group: root
+            "/lib/systemd/system/vscode-server.service":
+              content:
+                |
+                  [Unit]
+                  Description=vscode-server daemon
+
+                  [Service]
+                  Type=simple
+                  ExecStart=/bin/bash /opt/bin/update-start-vscode-server.sh
+                  Restart=always
+
+                  [Install]
+                  WantedBy=multi-user.target
+          commands:
+            01enable_cfn_hup:
+              command: systemctl enable cfn-hup.service
+            02start_cfn_hup:
+              command: systemctl start cfn-hup.service
+            03enable_vscode_server:
+              command: systemctl enable vscode-server.service
+            04start_vscode_server:
+              command: systemctl start vscode-server.service
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref EC2InstanceSecurityGroup
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            apt-get update -y
+            mkdir -p /opt/aws/bin
+            wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+            python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --configsets full_install --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable TCP via port 3000
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        # The managed IAM policy AmazonSSMManagedInstanceCore grants access to Session Manager
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+  MyEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref EC2Instance
+Outputs:
+  InstanceID:
+    Description: The EC2 Instance ID
+    Value: !Ref EC2Instance
